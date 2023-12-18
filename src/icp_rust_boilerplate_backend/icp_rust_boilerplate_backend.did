@@ -1,38 +1,48 @@
-type Error = variant { NotFound : record { msg : text } };
+type ClientDetails = record { name : text; email : text };
+type Error = variant {
+  InvalidPayload : record { errors : vec text };
+  NotFound : record { msg : text };
+  NotAdviser : record { msg : text };
+};
 type LegalAdvisor = record {
   id : nat64;
+  principal_string : text;
   name : text;
   credentials : text;
-  rating : float32;
+  rating : nat32;
+};
+type LegalAdvisorPayload = record {
+  name : text;
+  credentials : text;
+  rating : nat32;
 };
 type LegalConsultation = record {
   id : nat64;
   closed_at : opt nat64;
   created_at : nat64;
-  user_id : nat64;
   is_completed : bool;
+  client_details : ClientDetails;
   details : text;
   advisor_id : nat64;
 };
-type Result = variant { Ok; Err : Error };
-type Result_1 = variant { Ok : LegalAdvisor; Err : Error };
+type LegalConsultationPayload = record {
+  client_details : ClientDetails;
+  details : text;
+  advisor_id : nat64;
+};
+type Result = variant { Ok : LegalAdvisor; Err : Error };
+type Result_1 = variant { Ok; Err : Error };
 type Result_2 = variant { Ok : LegalConsultation; Err : Error };
 service : {
-  add_legal_advisor : (text, text, float32) -> (opt LegalAdvisor);
-  close_legal_consultation : (nat64, nat64) -> (Result);
-  delete_legal_consultation : (nat64) -> (Result);
-  get_legal_advisor : (nat64) -> (Result_1) query;
+  add_legal_advisor : (LegalAdvisorPayload) -> (Result);
+  close_legal_consultation : (nat64, nat64) -> (Result_1);
+  delete_legal_consultation : (nat64) -> (Result_1);
+  get_legal_advisor : (nat64) -> (Result) query;
   get_legal_consultation : (nat64) -> (Result_2) query;
-  initiate_legal_consultation : (nat64, nat64, text) -> (opt LegalConsultation);
+  initiate_legal_consultation : (LegalConsultationPayload) -> (Result_2);
   list_all_legal_advisors : () -> (vec LegalAdvisor) query;
   list_all_legal_consultations : () -> (vec LegalConsultation) query;
-  mark_consultation_as_completed : (nat64) -> (Result);
-  update_legal_advisor : (nat64, text, text, float32) -> (opt LegalAdvisor);
-  update_legal_consultation : (
-      nat64,
-      opt nat64,
-      opt nat64,
-      opt text,
-      opt bool,
-    ) -> (Result);
+  mark_consultation_as_completed : (nat64) -> (Result_1);
+  update_legal_advisor : (nat64, LegalAdvisorPayload) -> (Result);
+  update_legal_consultation : (nat64, LegalConsultationPayload) -> (Result_2);
 }
