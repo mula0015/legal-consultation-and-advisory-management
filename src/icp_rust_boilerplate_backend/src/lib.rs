@@ -272,6 +272,9 @@ fn update_legal_consultation(
         let advisor = get_legal_advisor(consultation.advisor_id)?;
         is_caller_advisor(&advisor)?;
 
+        // ensures new advisor_id is valid
+        let _new_advisor = get_legal_advisor(payload.advisor_id)?;
+
         let updated_consultation = LegalConsultation{
             id: consultation.id,
             advisor_id: payload.advisor_id,
