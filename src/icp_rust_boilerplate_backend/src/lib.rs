@@ -2,6 +2,7 @@
 extern crate serde;
 use candid::{Decode, Encode};
 use ic_cdk::api::time;
+use ic_cdk::caller;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{BoundedStorable, Cell, DefaultMemoryImpl, StableBTreeMap, Storable};
 use std::{borrow::Cow, cell::RefCell};
@@ -12,12 +13,25 @@ type IdCell = Cell<u64, Memory>;
 #[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
 struct LegalConsultation {
     id: u64,
-    user_id: u64,
+    client_details: ClientDetails,
     advisor_id: u64,
     details: String,
     created_at: u64,
     closed_at: Option<u64>,
     is_completed: bool,
+}
+
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+struct LegalConsultationPayload {
+    client_details: ClientDetails,
+    advisor_id: u64,
+    details: String,
+}
+
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+struct ClientDetails {
+    name: String,
+    email: String
 }
 
 impl Storable for LegalConsultation {
@@ -39,8 +53,15 @@ impl BoundedStorable for LegalConsultation {
 struct LegalAdvisor {
     id: u64,
     name: String,
+    principal_string: String,
     credentials: String,
-    rating: f32,
+    rating: u32,
+}
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+struct LegalAdvisorPayload {
+    name: String,
+    credentials: String,
+    rating: u32,
 }
 
 impl Storable for LegalAdvisor {
@@ -79,6 +100,7 @@ thread_local! {
     ));
 }
 
+
 #[ic_cdk::query]
 fn get_legal_consultation(id: u64) -> Result<LegalConsultation, Error> {
     match _get_legal_consultation(&id) {
@@ -90,7 +112,11 @@ fn get_legal_consultation(id: u64) -> Result<LegalConsultation, Error> {
 }
 
 #[ic_cdk::update]
-fn initiate_legal_consultation(user_id: u64, advisor_id: u64, details: String) -> Option<LegalConsultation> {
+fn initiate_legal_consultation(payload: LegalConsultationPayload) -> Result<LegalConsultation, Error> {
+    validate_legal_consultation_payload(&payload)?;
+
+    let advisor = get_legal_advisor(payload.advisor_id)?;
+    is_caller_advisor(&advisor)?;
     let id = ID_COUNTER
         .with(|counter| {
             let current_value = *counter.borrow().get();
@@ -100,33 +126,31 @@ fn initiate_legal_consultation(user_id: u64, advisor_id: u64, details: String) -
 
     let consultation = LegalConsultation {
         id,
-        user_id,
-        advisor_id,
-        details,
+        client_details: payload.client_details,
+        advisor_id: payload.advisor_id,
+        details: payload.details,
         created_at: time(),
         closed_at: None,
         is_completed: false,
     };
 
     do_insert_legal_consultation(&consultation);
-    Some(consultation)
+    Ok(consultation)
 }
 
 #[ic_cdk::update]
-fn update_legal_advisor(id: u64, name: String, credentials: String, rating: f32) -> Option<LegalAdvisor> {
-    let advisor = LegalAdvisor {
-        id,
-        name,
-        credentials,
-        rating,
-    };
+fn update_legal_advisor(id: u64, payload: LegalAdvisorPayload) -> Result<LegalAdvisor, Error> {
+    let mut legal_advisor = get_legal_advisor(id)?;
+    is_caller_advisor(&legal_advisor)?;
 
-    do_update_legal_advisor(&advisor);
-    Some(advisor)
-}
+    validate_legal_advisor_payload(&payload)?;
 
-fn do_update_legal_advisor(advisor: &LegalAdvisor) {
-    LEGAL_ADVISORS.with(|service| service.borrow_mut().insert(advisor.id, advisor.clone()));
+    legal_advisor.name = payload.name;
+    legal_advisor.credentials = payload.credentials;
+    legal_advisor.rating = payload.rating;
+
+    do_insert_legal_advisor(&legal_advisor);
+    Ok(legal_advisor)
 }
 
 fn do_insert_legal_consultation(consultation: &LegalConsultation) {
@@ -139,7 +163,9 @@ fn _get_legal_consultation(id: &u64) -> Option<LegalConsultation> {
 
 #[ic_cdk::update]
 fn delete_legal_consultation(id: u64) -> Result<(), Error> {
-    if let Some(_) = _get_legal_consultation(&id) {
+    if let Some(consultation) = _get_legal_consultation(&id) {
+        let advisor = get_legal_advisor(consultation.advisor_id)?;
+        is_caller_advisor(&advisor)?;
         LEGAL_CONSULTATIONS.with(|service| service.borrow_mut().remove(&id));
         Ok(())
     } else {
@@ -150,7 +176,8 @@ fn delete_legal_consultation(id: u64) -> Result<(), Error> {
 }
 
 #[ic_cdk::update]
-fn add_legal_advisor(name: String, credentials: String, rating: f32) -> Option<LegalAdvisor> {
+fn add_legal_advisor(payload: LegalAdvisorPayload) -> Result<LegalAdvisor, Error> {
+    validate_legal_advisor_payload(&payload)?;
     let id = ID_COUNTER
         .with(|counter| {
             let current_value = *counter.borrow().get();
@@ -160,13 +187,14 @@ fn add_legal_advisor(name: String, credentials: String, rating: f32) -> Option<L
 
     let advisor = LegalAdvisor {
         id,
-        name,
-        credentials,
-        rating,
+        principal_string: caller().to_string(),
+        name: payload.name,
+        credentials: payload.credentials,
+        rating: payload.rating,
     };
 
     do_insert_legal_advisor(&advisor);
-    Some(advisor)
+    Ok(advisor)
 }
 
 #[ic_cdk::query]
@@ -190,6 +218,8 @@ fn _get_legal_advisor(id: &u64) -> Option<LegalAdvisor> {
 #[ic_cdk::update]
 fn mark_consultation_as_completed(id: u64) -> Result<(), Error> {
     if let Some(consultation) = _get_legal_consultation(&id) {
+        let advisor = get_legal_advisor(consultation.advisor_id)?;
+        is_caller_advisor(&advisor)?;
         let mut updated_consultation = consultation.clone();
         updated_consultation.is_completed = true;
         LEGAL_CONSULTATIONS.with(|service| service.borrow_mut().insert(id, updated_consultation));
@@ -204,6 +234,8 @@ fn mark_consultation_as_completed(id: u64) -> Result<(), Error> {
 #[ic_cdk::update]
 fn close_legal_consultation(id: u64, closed_at: u64) -> Result<(), Error> {
     if let Some(mut consultation) = _get_legal_consultation(&id) {
+        let advisor = get_legal_advisor(consultation.advisor_id)?;
+        is_caller_advisor(&advisor)?;
         consultation.closed_at = Some(closed_at);
         LEGAL_CONSULTATIONS.with(|service| service.borrow_mut().insert(id, consultation));
         Ok(())
@@ -233,29 +265,29 @@ fn list_all_legal_advisors() -> Vec<LegalAdvisor> {
 #[ic_cdk::update]
 fn update_legal_consultation(
     id: u64,
-    user_id: Option<u64>,
-    advisor_id: Option<u64>,
-    details: Option<String>,
-    is_completed: Option<bool>,
-) -> Result<(), Error> {
-    if let Some(mut consultation) = _get_legal_consultation(&id) {
-        // Update fields if provided
-        if let Some(user_id) = user_id {
-            consultation.user_id = user_id;
-        }
-        if let Some(advisor_id) = advisor_id {
-            consultation.advisor_id = advisor_id;
-        }
-        if let Some(details) = details {
-            consultation.details = details;
-        }
-        if let Some(is_completed) = is_completed {
-            consultation.is_completed = is_completed;
-        }
+    payload: LegalConsultationPayload
+) -> Result<LegalConsultation, Error> {
+    if let Some(consultation) = _get_legal_consultation(&id) {
+        validate_legal_consultation_payload(&payload)?;
+        let advisor = get_legal_advisor(consultation.advisor_id)?;
+        is_caller_advisor(&advisor)?;
+
+        // ensures new advisor_id is valid
+        let _new_advisor = get_legal_advisor(payload.advisor_id)?;
+
+        let updated_consultation = LegalConsultation{
+            id: consultation.id,
+            advisor_id: payload.advisor_id,
+            created_at: consultation.created_at.clone(),
+            client_details: payload.client_details,
+            closed_at: consultation.closed_at.clone(),
+            details: payload.details,
+            is_completed: consultation.is_completed
+        };
 
         // Update the consultation in the map
         LEGAL_CONSULTATIONS.with(|service| service.borrow_mut().insert(id, consultation));
-        Ok(())
+        Ok(updated_consultation)
     } else {
         Err(Error::NotFound {
             msg: format!("Legal consultation with id={} not found", id),
@@ -263,9 +295,59 @@ fn update_legal_consultation(
     }
 }
 
+// Helper function to check whether the caller is the principal of the advisor
+fn is_caller_advisor(advisor: &LegalAdvisor) -> Result<(), Error>{
+    if advisor.principal_string != caller().to_string(){
+        return Err(Error::NotAdviser { msg: format!("Caller is not the principal of the advisor") })
+    }else{
+        Ok(())
+    }
+}
+// Helper function that return a bool value on whether the trimmed string is empty
+fn is_invalid_string(str: &String) -> bool{
+    str.trim().is_empty()
+
+}
+// Helper function to validate the input payload when creating or updating a consultation
+fn validate_legal_consultation_payload(payload: &LegalConsultationPayload) -> Result<(), Error>{
+    let mut errors: Vec<String> = Vec::new();
+    if is_invalid_string(&payload.details){
+        errors.push(format!("Consultation details='{}' cannot be empty.", payload.details))
+    }
+    if is_invalid_string(&payload.client_details.name){
+        errors.push(format!("Client's name='{}' cannot be empty.", payload.client_details.name))
+    }
+    if is_invalid_string(&payload.client_details.email) {
+        errors.push(format!("Client's email='{}' cannot be empty.", payload.client_details.email))
+    }
+    if errors.is_empty(){
+        Ok(())
+    }else{
+        return Err(Error::InvalidPayload { errors })
+    }
+}
+// Helper function to validate the input payload when creating or updating an advisor
+fn validate_legal_advisor_payload(payload: &LegalAdvisorPayload) -> Result<(), Error>{
+    let mut errors: Vec<String> = Vec::new();
+    if is_invalid_string(&payload.name){
+        errors.push(format!("Advisor name='{}' cannot be empty.", payload.name))
+    }
+    if is_invalid_string(&payload.credentials){
+        errors.push(format!("Advisor credentials='{}' cannot be empty.", payload.credentials))
+    }
+
+    if errors.is_empty(){
+        Ok(())
+    }else{
+        return Err(Error::InvalidPayload { errors })
+    }
+}
+
 #[derive(candid::CandidType, Deserialize, Serialize)]
 enum Error {
     NotFound { msg: String },
+    NotAdviser{msg: String},
+    InvalidPayload{errors: Vec<String>}
 }
 
 ic_cdk::export_candid!();
