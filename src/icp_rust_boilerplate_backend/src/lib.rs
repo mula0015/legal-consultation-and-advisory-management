@@ -12,7 +12,6 @@ type IdCell = Cell<u64, Memory>;
 #[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
 struct LegalConsultation {
     id: u64,
-    user_id: u64,
     advisor_id: u64,
     details: String,
     created_at: u64,
@@ -90,7 +89,7 @@ fn get_legal_consultation(id: u64) -> Result<LegalConsultation, Error> {
 }
 
 #[ic_cdk::update]
-fn initiate_legal_consultation(user_id: u64, advisor_id: u64, details: String) -> Option<LegalConsultation> {
+fn initiate_legal_consultation(advisor_id: u64, details: String) -> Option<LegalConsultation> {
     let id = ID_COUNTER
         .with(|counter| {
             let current_value = *counter.borrow().get();
@@ -100,7 +99,6 @@ fn initiate_legal_consultation(user_id: u64, advisor_id: u64, details: String) -
 
     let consultation = LegalConsultation {
         id,
-        user_id,
         advisor_id,
         details,
         created_at: time(),
@@ -233,16 +231,12 @@ fn list_all_legal_advisors() -> Vec<LegalAdvisor> {
 #[ic_cdk::update]
 fn update_legal_consultation(
     id: u64,
-    user_id: Option<u64>,
     advisor_id: Option<u64>,
     details: Option<String>,
     is_completed: Option<bool>,
 ) -> Result<(), Error> {
     if let Some(mut consultation) = _get_legal_consultation(&id) {
         // Update fields if provided
-        if let Some(user_id) = user_id {
-            consultation.user_id = user_id;
-        }
         if let Some(advisor_id) = advisor_id {
             consultation.advisor_id = advisor_id;
         }

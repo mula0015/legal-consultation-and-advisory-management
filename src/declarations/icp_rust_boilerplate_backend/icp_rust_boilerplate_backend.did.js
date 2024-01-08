@@ -12,7 +12,6 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Nat64,
     'closed_at' : IDL.Opt(IDL.Nat64),
     'created_at' : IDL.Nat64,
-    'user_id' : IDL.Nat64,
     'is_completed' : IDL.Bool,
     'details' : IDL.Text,
     'advisor_id' : IDL.Nat64,
@@ -29,7 +28,7 @@ export const idlFactory = ({ IDL }) => {
     'get_legal_advisor' : IDL.Func([IDL.Nat64], [Result_1], ['query']),
     'get_legal_consultation' : IDL.Func([IDL.Nat64], [Result_2], ['query']),
     'initiate_legal_consultation' : IDL.Func(
-        [IDL.Nat64, IDL.Nat64, IDL.Text],
+        [IDL.Nat64, IDL.Text],
         [IDL.Opt(LegalConsultation)],
         [],
       ),
@@ -50,13 +49,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'update_legal_consultation' : IDL.Func(
-        [
-          IDL.Nat64,
-          IDL.Opt(IDL.Nat64),
-          IDL.Opt(IDL.Nat64),
-          IDL.Opt(IDL.Text),
-          IDL.Opt(IDL.Bool),
-        ],
+        [IDL.Nat64, IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text), IDL.Opt(IDL.Bool)],
         [Result],
         [],
       ),

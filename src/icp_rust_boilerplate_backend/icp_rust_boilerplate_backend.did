@@ -9,7 +9,6 @@ type LegalConsultation = record {
   id : nat64;
   closed_at : opt nat64;
   created_at : nat64;
-  user_id : nat64;
   is_completed : bool;
   details : text;
   advisor_id : nat64;
@@ -23,16 +22,12 @@ service : {
   delete_legal_consultation : (nat64) -> (Result);
   get_legal_advisor : (nat64) -> (Result_1) query;
   get_legal_consultation : (nat64) -> (Result_2) query;
-  initiate_legal_consultation : (nat64, nat64, text) -> (opt LegalConsultation);
+  initiate_legal_consultation : (nat64, text) -> (opt LegalConsultation);
   list_all_legal_advisors : () -> (vec LegalAdvisor) query;
   list_all_legal_consultations : () -> (vec LegalConsultation) query;
   mark_consultation_as_completed : (nat64) -> (Result);
   update_legal_advisor : (nat64, text, text, float32) -> (opt LegalAdvisor);
-  update_legal_consultation : (
-      nat64,
-      opt nat64,
-      opt nat64,
-      opt text,
-      opt bool,
-    ) -> (Result);
+  update_legal_consultation : (nat64, opt nat64, opt text, opt bool) -> (
+      Result,
+    );
 }

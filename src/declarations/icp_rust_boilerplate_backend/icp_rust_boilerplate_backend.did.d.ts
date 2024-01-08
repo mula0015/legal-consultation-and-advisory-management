@@ -12,7 +12,6 @@ export interface LegalConsultation {
   'id' : bigint,
   'closed_at' : [] | [bigint],
   'created_at' : bigint,
-  'user_id' : bigint,
   'is_completed' : boolean,
   'details' : string,
   'advisor_id' : bigint,
@@ -33,7 +32,7 @@ export interface _SERVICE {
   'get_legal_advisor' : ActorMethod<[bigint], Result_1>,
   'get_legal_consultation' : ActorMethod<[bigint], Result_2>,
   'initiate_legal_consultation' : ActorMethod<
-    [bigint, bigint, string],
+    [bigint, string],
     [] | [LegalConsultation]
   >,
   'list_all_legal_advisors' : ActorMethod<[], Array<LegalAdvisor>>,
@@ -44,7 +43,7 @@ export interface _SERVICE {
     [] | [LegalAdvisor]
   >,
   'update_legal_consultation' : ActorMethod<
-    [bigint, [] | [bigint], [] | [bigint], [] | [string], [] | [boolean]],
+    [bigint, [] | [bigint], [] | [string], [] | [boolean]],
     Result
   >,
 }
